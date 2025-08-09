@@ -1,6 +1,6 @@
-module github.com/mightatnight/trace
+module github.com/broaskaGit/trace
 
-go 1.24.3
+go 1.24.5
 
 require (
 	github.com/stretchr/testify v1.10.0
