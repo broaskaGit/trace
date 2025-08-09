@@ -157,15 +157,6 @@ func TestNew(t *testing.T) {
 	})
 }
 
-func TestSugarLogger_Fatal(t *testing.T) {
-	// Testing Fatal is tricky because it calls os.Exit.
-	// A proper test would involve running a subprocess and checking its exit code and output.
-	// The `zaptest` package provides a logger that calls t.Fatal, but that also stops the test prematurely.
-	// For this library, we will assume that if other log levels work, Fatal will also correctly
-	// call the underlying zap logger's Fatal method. The behavior of zap's Fatal is tested in zap itself.
-	t.Skip("Skipping fatal test due to complexity of testing os.Exit")
-}
-
 func TestPackageLevelFunctions(t *testing.T) {
 	var buffer bytes.Buffer
 	writer := zapcore.AddSync(&buffer)

@@ -1,7 +1,7 @@
 # trace
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/mightatnight/trace)](https://goreportcard.com/report/github.com/mightatnight/trace)
-[![Go.Dev reference](https://img.shields.io/badge/go.dev-reference-blue?logo=go&logoColor=white)](https://pkg.go.dev/github.com/mightatnight/trace)
+[![Go Report Card](https://goreportcard.com/badge/github.com/broaskaGit/trace)](https://goreportcard.com/report/github.com/broaskaGit/trace)
+[![Go.Dev reference](https://img.shields.io/badge/go.dev-reference-blue?logo=go&logoColor=white)](https://pkg.go.dev/github.com/broaskaGit/trace)
 
 A simple, fast, and structured logging library for Go, built as a wrapper around `go.uber.org/zap`.
 
@@ -18,7 +18,7 @@ A simple, fast, and structured logging library for Go, built as a wrapper around
 ## Installation
 
 ```sh
-go get github.com/mightatnight/trace
+go get github.com/broaskaGit/trace
 ```
 
 ## Usage
@@ -31,7 +31,7 @@ Create a new logger and start logging messages. Logs are written to `stdout` by 
 package main
 
 import (
-    "github.com/mightatnight/trace"
+    "github.com/broaskaGit/trace"
 )
 
 func main() {
@@ -53,7 +53,7 @@ package main
 import (
     "log"
     "os"
-    "github.com/mightatnight/trace"
+    "github.com/broaskaGit/trace"
 )
 
 func main() {
@@ -78,7 +78,7 @@ For convenience, you can set a global default logger and use package-level loggi
 package main
 
 import (
-    "github.com/mightatnight/trace"
+    "github.com/broaskaGit/trace"
 )
 
 func main() {
