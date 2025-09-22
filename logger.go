@@ -2,6 +2,7 @@ package trace
 
 import (
 	"os"
+	"strings"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -90,8 +91,23 @@ func Bool(key string, val bool) zap.Field {
 }
 
 // Err creates an error field for structured logging
+// It formats the error message to replace newlines with spaces
+// to prevent multi-line log output from joined errors
 func Err(err error) zap.Field {
-	return zap.Error(err)
+	if err == nil {
+		return zap.String("error", "")
+	}
+	return zap.String("error", formatError(err))
+}
+
+// formatError formats error messages by replacing newlines and tabs with spaces
+// This ensures that joined errors don't create multi-line log output
+func formatError(err error) string {
+	if err == nil {
+		return ""
+	}
+	// Replace newlines and tabs with spaces to prevent multi-line log output
+	return strings.ReplaceAll(strings.ReplaceAll(err.Error(), "\n", " | "), "\t", " | ")
 }
 
 // Package-level logging functions that use the default logger

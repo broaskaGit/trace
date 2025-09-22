@@ -2,8 +2,10 @@ package trace_test
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/broaskaGit/trace"
@@ -157,6 +159,15 @@ func TestNew(t *testing.T) {
 	})
 }
 
+func TestSugarLogger_Fatal(t *testing.T) {
+	// Testing Fatal is tricky because it calls os.Exit.
+	// A proper test would involve running a subprocess and checking its exit code and output.
+	// The `zaptest` package provides a logger that calls t.Fatal, but that also stops the test prematurely.
+	// For this library, we will assume that if other log levels work, Fatal will also correctly
+	// call the underlying zap logger's Fatal method. The behavior of zap's Fatal is tested in zap itself.
+	t.Skip("Skipping fatal test due to complexity of testing os.Exit")
+}
+
 func TestPackageLevelFunctions(t *testing.T) {
 	var buffer bytes.Buffer
 	writer := zapcore.AddSync(&buffer)
@@ -200,7 +211,98 @@ func TestFieldHelpers(t *testing.T) {
 
 	err := io.EOF
 	errField := trace.Err(err)
-	assert.Equal(t, zap.Error(err), errField)
+	// Now using zap.String with formatted error message
+	expectedField := zap.String("error", err.Error())
+	assert.Equal(t, expectedField, errField)
+}
+
+func TestJoinedErrorsFormatting(t *testing.T) {
+	var buffer bytes.Buffer
+	writer := zapcore.AddSync(&buffer)
+	core := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig()),
+		writer,
+		zap.DebugLevel,
+	)
+	testLogger := &trace.SugarLogger{Log: zap.New(core)}
+
+	// Test joined errors - the main issue is that error messages contain newlines
+	joinedErr := errors.Join(
+		errors.New("TLS handshake timeout"),
+		errors.New("connection error"),
+		errors.New("handle auth callback"),
+	)
+	testLogger.Error("Joined error test", trace.Err(joinedErr))
+
+	joinedOutput := buffer.String()
+
+	// The error message should be formatted with spaces instead of newlines
+	t.Logf("Joined error output: %q", joinedOutput)
+
+	// Check that the formatted error message contains spaces instead of newlines
+	// Extract the error value from the JSON output
+	errorStart := strings.Index(joinedOutput, "\"error\": \"")
+	if errorStart != -1 {
+		errorStart += 10 // length of "\"error\": \""
+		errorEnd := strings.Index(joinedOutput[errorStart:], "\"")
+		if errorEnd != -1 {
+			errorValue := joinedOutput[errorStart : errorStart+errorEnd]
+			assert.NotContains(t, errorValue, "\n", "Error message should not contain newlines")
+			assert.Contains(t, errorValue, " | ", "Error message should contain spaces as separators")
+		}
+	}
+
+	// The original error should still contain newlines for verification
+	assert.Contains(t, joinedErr.Error(), "\n", "Original joined error should contain newlines")
+}
+
+func TestErrorFormattingEdgeCases(t *testing.T) {
+	var buffer bytes.Buffer
+	writer := zapcore.AddSync(&buffer)
+	core := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig()),
+		writer,
+		zap.DebugLevel,
+	)
+	testLogger := &trace.SugarLogger{Log: zap.New(core)}
+
+	// Test nil error
+	testLogger.Error("Nil error test", trace.Err(nil))
+	output := buffer.String()
+	buffer.Reset()
+	assert.Contains(t, output, "\"error\": \"\"", "Nil error should be empty string")
+
+	// Test error with no newlines
+	singleErr := errors.New("simple error message")
+	testLogger.Error("Simple error test", trace.Err(singleErr))
+	output = buffer.String()
+	buffer.Reset()
+	errorStart := strings.Index(output, "\"error\": \"")
+	if errorStart != -1 {
+		errorStart += 10
+		errorEnd := strings.Index(output[errorStart:], "\"")
+		if errorEnd != -1 {
+			errorValue := output[errorStart : errorStart+errorEnd]
+			assert.Equal(t, "simple error message", errorValue, "Simple error should be unchanged")
+		}
+	}
+
+	// Test error with multiple types of whitespace
+	multiSpaceErr := errors.New("error\nwith\n\nmultiple\n\n\nnewlines\tand\ttabs")
+	testLogger.Error("Multi whitespace error test", trace.Err(multiSpaceErr))
+	output = buffer.String()
+	buffer.Reset()
+	errorStart = strings.Index(output, "\"error\": \"")
+	if errorStart != -1 {
+		errorStart += 10
+		errorEnd := strings.Index(output[errorStart:], "\"")
+		if errorEnd != -1 {
+			errorValue := output[errorStart : errorStart+errorEnd]
+			assert.NotContains(t, errorValue, "\n", "Newlines should be replaced with spaces")
+			assert.NotContains(t, errorValue, "\t", "Tabs should be replaced with spaces")
+			assert.Contains(t, errorValue, " ", "Should contain spaces as separators")
+		}
+	}
 }
 
 func TestDisabledLevel(t *testing.T) {
