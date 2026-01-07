@@ -1,15 +1,17 @@
 package trace
 
 import (
+	"context"
 	"os"
-	"strings"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-// SugarLogger implements the LoggerInterface with a real zap logger
-type SugarLogger struct {
+var _ Logger = &sugarLogger{}
+
+// sugarLogger implements the LoggerInterface with a real zap logger
+type sugarLogger struct {
 	Log *zap.Logger
 }
 
@@ -57,125 +59,86 @@ func New(level zapcore.Level, prefix string, logFile *os.File) Logger {
 	}
 
 	if prefix != "" {
-		return &SugarLogger{
+		return &sugarLogger{
 			Log: zap.New(core).Named(prefix),
 		}
 	}
 
 	// Build the logger with minimal options for speed
-	return &SugarLogger{
+	return &sugarLogger{
 		Log: zap.New(core),
 	}
 }
 
-// NewNoopLogger creates a no-op logger that safely discards all log messages
-func NewNoopLogger() Logger {
-	return &NoopLogger{}
-}
-
-// Pre-define common fields for reuse
-
-// Str creates a string field for structured logging
-func Str(key string, val string) zap.Field {
-	return zap.String(key, val)
-}
-
-// Int creates an integer field for structured logging
-func Int(key string, val int) zap.Field {
-	return zap.Int(key, val)
-}
-
-// Bool creates a boolean field for structured logging
-func Bool(key string, val bool) zap.Field {
-	return zap.Bool(key, val)
-}
-
-// Err creates an error field for structured logging
-// It formats the error message to replace newlines with spaces
-// to prevent multi-line log output from joined errors
-func Err(err error) zap.Field {
-	if err == nil {
-		return zap.String("error", "")
+func NewChildLogger(parent Logger, prefix string) Logger {
+	if parent == nil || parent.Zap() == nil {
+		return NewNoopLogger()
 	}
-	return zap.String("error", formatError(err))
-}
 
-// formatError formats error messages by replacing newlines and tabs with spaces
-// This ensures that joined errors don't create multi-line log output
-func formatError(err error) string {
-	if err == nil {
-		return ""
+	if prefix != "" {
+		return &sugarLogger{
+			Log: parent.Zap().Named(prefix),
+		}
 	}
-	// Replace newlines and tabs with spaces to prevent multi-line log output
-	return strings.ReplaceAll(strings.ReplaceAll(err.Error(), "\n", " | "), "\t", " | ")
+
+	return &sugarLogger{
+		Log: parent.Zap(),
+	}
 }
-
-// Package-level logging functions that use the default logger
-
-// Debug logs a debug message using the default logger
-func Debug(msg string, fields ...zap.Field) {
-	defaultLogger.Debug(msg, fields...)
-}
-
-// Info logs an info message using the default logger
-func Info(msg string, fields ...zap.Field) {
-	defaultLogger.Info(msg, fields...)
-}
-
-// Warn logs a warning message using the default logger
-func Warn(msg string, fields ...zap.Field) {
-	defaultLogger.Warn(msg, fields...)
-}
-
-// Error logs an error message using the default logger
-func Error(msg string, fields ...zap.Field) {
-	defaultLogger.Error(msg, fields...)
-}
-
-// Fatal logs a fatal message using the default logger
-func Fatal(msg string, fields ...zap.Field) {
-	defaultLogger.Fatal(msg, fields...)
-}
-
-// Logger implementation methods
 
 // Debug logs a debug message
-func (l *SugarLogger) Debug(msg string, fields ...zap.Field) {
+func (l *sugarLogger) Debug(msg string, fields ...zap.Field) {
 	if l.Log != nil {
 		l.Log.Debug(msg, fields...)
 	}
 }
 
 // Info logs an info message
-func (l *SugarLogger) Info(msg string, fields ...zap.Field) {
+func (l *sugarLogger) Info(msg string, fields ...zap.Field) {
 	if l.Log != nil {
 		l.Log.Info(msg, fields...)
 	}
 }
 
 // Warn logs a warning message
-func (l *SugarLogger) Warn(msg string, fields ...zap.Field) {
+func (l *sugarLogger) Warn(msg string, fields ...zap.Field) {
 	if l.Log != nil {
 		l.Log.Warn(msg, fields...)
 	}
 }
 
 // Error logs an error message
-func (l *SugarLogger) Error(msg string, fields ...zap.Field) {
+func (l *sugarLogger) Error(msg string, fields ...zap.Field) {
 	if l.Log != nil {
 		l.Log.Error(msg, fields...)
 	}
 }
 
 // Fatal logs a fatal message and exits
-func (l *SugarLogger) Fatal(msg string, fields ...zap.Field) {
+func (l *sugarLogger) Fatal(msg string, fields ...zap.Field) {
 	if l.Log != nil {
 		l.Log.Fatal(msg, fields...)
 	}
 }
 
+// With returns a child logger with additional structured fields included in every log.
+func (l *sugarLogger) With(fields ...zap.Field) Logger {
+	if l == nil || l.Log == nil {
+		return l
+	}
+	return &sugarLogger{Log: l.Log.With(fields...)}
+}
+
+// Named returns a child logger with a name scope (logger name prefix).
+func (l *sugarLogger) Named(name string) Logger {
+	if l == nil || l.Log == nil {
+		return l
+	}
+	return &sugarLogger{Log: l.Log.Named(name)}
+}
+
 // Zap returns the underlying zap logger if needed
-func (l *SugarLogger) Zap() *zap.Logger {
+func (l *sugarLogger) Zap() *zap.Logger {
 	return l.Log
 }
 
@@ -191,4 +154,27 @@ var (
 // DisabledLevel returns a level that disables all logging
 func DisabledLevel() zapcore.Level {
 	return zapcore.Level(127)
+}
+
+// Context scoping helpers
+
+type loggerCtxKey struct{}
+
+// LoggerToContext attaches the provided logger to the context.
+func LoggerToContext(ctx context.Context, l Logger) context.Context {
+	return context.WithValue(ctx, loggerCtxKey{}, l)
+}
+
+// LoggerFromContext retrieves a logger from context or returns a no-op logger if absent.
+// Typical usage:
+//   - component-scoped: base := root.Named("http").With(zap.String("component","http"))
+//   - request-scoped:  reqLog := base.With(zap.String("request_id", rid))
+//   - ctx = WithLogger(ctx, reqLog)
+func LoggerFromContext(ctx context.Context) Logger {
+	if v := ctx.Value(loggerCtxKey{}); v != nil {
+		if l, ok := v.(Logger); ok && l != nil && l.Zap() != nil {
+			return l
+		}
+	}
+	return NewNoopLogger()
 }

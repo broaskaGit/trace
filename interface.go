@@ -9,47 +9,29 @@ type Logger interface {
 	Warn(msg string, fields ...zap.Field)
 	Error(msg string, fields ...zap.Field)
 	Fatal(msg string, fields ...zap.Field)
+	// With returns a child logger with additional structured fields included in every log.
+	With(fields ...zap.Field) Logger
+	// Named returns a child logger with a name scope (logger name prefix).
+	Named(name string) Logger
+	// Zap returns the underlying zap.Logger.
 	Zap() *zap.Logger
 }
 
 // NoopLogger implements LoggerInterface with no-op operations
 type NoopLogger struct{}
 
+// NewNoopLogger creates a no-op logger that safely discards all log messages
+func NewNoopLogger() Logger {
+	return &NoopLogger{}
+}
+
 // NoopLogger implementation methods
 
-// Debug is a no-op
 func (n *NoopLogger) Debug(msg string, fields ...zap.Field) {}
-
-// Info is a no-op
-func (n *NoopLogger) Info(msg string, fields ...zap.Field) {}
-
-// Warn is a no-op
-func (n *NoopLogger) Warn(msg string, fields ...zap.Field) {}
-
-// Error is a no-op
+func (n *NoopLogger) Info(msg string, fields ...zap.Field)  {}
+func (n *NoopLogger) Warn(msg string, fields ...zap.Field)  {}
 func (n *NoopLogger) Error(msg string, fields ...zap.Field) {}
-
-// Fatal is a no-op
 func (n *NoopLogger) Fatal(msg string, fields ...zap.Field) {}
-
-// Zap returns nil for the underlying zap logger
-func (n *NoopLogger) Zap() *zap.Logger {
-	return nil
-}
-
-// Default global logger (no-op by default)
-var defaultLogger Logger = &NoopLogger{}
-
-// SetDefaultLogger sets the global default logger
-func SetDefaultLogger(logger Logger) {
-	if logger != nil {
-		defaultLogger = logger
-	} else {
-		defaultLogger = &NoopLogger{}
-	}
-}
-
-// GetDefaultLogger returns the current global default logger
-func GetDefaultLogger() Logger {
-	return defaultLogger
-}
+func (n *NoopLogger) With(fields ...zap.Field) Logger       { return n }
+func (n *NoopLogger) Named(name string) Logger              { return n }
+func (n *NoopLogger) Zap() *zap.Logger                      { return zap.NewNop() }
